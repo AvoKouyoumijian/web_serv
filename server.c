@@ -18,6 +18,7 @@
 #define PORT "3490"
 #define BACKLOG 5
 #define MAX_DATA_SIZE 5000
+
 #define SLASH_OFFSET 1
 
 // err defn's
@@ -25,11 +26,17 @@
 #define ERR_BIND 2
 #define ERR 1
 
+// open file options
+#define HTML 0
+#define CSS 1
+#define JS 2
+#define OTHER 3
+
 // function definitions
 void process_requests(int sockfd);
 int search_server_connection(struct addrinfo *servinfo);
 void get_serv_info(struct addrinfo **servinfo);
-int read_file(char *file_name, char **file_contents);
+int read_file(char *file_name, char **file_contents, char *file_format);
 
 int main(void)
 {
@@ -148,6 +155,21 @@ void process_requests(int sockfd)
         char *route = strtok(NULL, " ");
         char *version = strtok(NULL, " ");
 
+        char *accept_format;
+        for (int i = 1; req[i] != NULL; i++)
+        {
+            if ((accept_format = strtok(strstr(req[i], "Accept:"), ",")))
+            {
+                accept_format += sizeof("Accept:");
+                break;
+            }
+            if (req[i + 1] == NULL)
+            {
+                printf("[server]err: req format field missing\n");
+                continue;
+            }
+        }
+
         if (!fork())
         {
             char *res = NULL;
@@ -158,17 +180,26 @@ void process_requests(int sockfd)
             {
                 close(new_fd);
                 free(res);
-                exit(0);
+                exit(EXIT_SUCCESS);
             }
             else if (strcmp("/", route) == 0)
             {
                 // printf("route: %s\n", route);
-                res_len = read_file("index.html", &res);
+                res_len = read_file("index.html", &res, "text/html");
             }
             else
             {
-                // printf("route: %s\n", route);
-                res_len = read_file(route + SLASH_OFFSET, &res);
+                if (!strcmp("text/html", accept_format) || !strcmp("text/css", accept_format) ||
+                    !strcmp("text/js", accept_format) || !strcmp("*/*", accept_format))
+                {
+                    res_len = read_file(route + SLASH_OFFSET, &res, accept_format);
+                }
+                // not implented routes
+                else
+                {
+                    close(sockfd);
+                    exit(EXIT_SUCCESS);
+                }
             }
 
             close(sockfd);
@@ -179,7 +210,7 @@ void process_requests(int sockfd)
             }
             close(new_fd);
             free(res);
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
         close(new_fd);
     }
@@ -215,7 +246,7 @@ void get_serv_info(struct addrinfo **servinfo)
  * params: file_name, **file_contents
  * reads a given file and returns its contents via a pointer as well as its lenght
  */
-int read_file(char *file_name, char **file_contents)
+int read_file(char *file_name, char **file_contents, char *file_format)
 {
     // init a html response header
     char *header = malloc(1024);
@@ -243,6 +274,21 @@ int read_file(char *file_name, char **file_contents)
     }
     else
     {
+        // detirmine valid file format
+        if (!strcmp(file_format, "*/*"))
+        {
+            char *ext = strrchr(file_name, '.');
+            if (ext == NULL)
+            {
+                file_format = strdup("text/plain");
+            }
+            else
+            {
+                file_format = malloc(strlen("text/") + strlen(ext) + 1);
+                snprintf(file_format, len, "text/%s", ext + 1);
+            }
+        }
+
         // get the lenght of the file
         fseek(fp, 0L, SEEK_END);
         len = ftell(fp);
@@ -250,11 +296,11 @@ int read_file(char *file_name, char **file_contents)
         fseek(fp, 0L, SEEK_SET);
 
         // Prepare HTTP response header
-        snprintf(header, 1024, "HTTP/1.1 /index.html 200 OK\r\n"
-                               "Content-Type: text/html; charset=UTF-8\r\n"
+        snprintf(header, 1024, "HTTP/1.1 /%s 200 OK\r\n"
+                               "Content-Type: %s; charset=UTF-8\r\n"
                                "Content-Length: %d\r\n"
                                "\r\n",
-                 len);
+                 file_name, file_format, len);
     }
 
     // concat the header with the HTML response
@@ -268,6 +314,7 @@ int read_file(char *file_name, char **file_contents)
     (*file_contents)[len + strlen(header)] = 0;
     fclose(fp);
 
+    printf("%s", header);
     // free header
     free(header);
 
