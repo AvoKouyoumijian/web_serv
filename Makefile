@@ -1,5 +1,6 @@
 # Compiler
 CC = gcc
+CFLAGS = -Wall -Werror -g
 
 # Output files
 CLIENT = client
@@ -9,10 +10,10 @@ SERVER = server
 all: $(CLIENT) $(SERVER)
 
 $(CLIENT): client.c
-	$(CC) client.c -o $(CLIENT)
+	$(CC) $(CFLAGS) client.c -o $(CLIENT)
 
 $(SERVER): server.c
-	$(CC) server.c -o $(SERVER)
+	$(CC) $(CFLAGS) server.c -o $(SERVER)
 
 # Clean up build artifacts
 clean:
