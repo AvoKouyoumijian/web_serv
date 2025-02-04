@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <malloc.h>
 
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include "helper.h"
 
 // server setting defn's
@@ -24,6 +26,7 @@
 #define SLASH_OFFSET 1
 
 // err defn's
+#define ERR_SSL 4
 #define ERR_ADDR_INF 3
 #define ERR_BIND 2
 #define ERR 1
@@ -144,21 +147,40 @@ void process_requests(int sockfd, char *dir)
 
         inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), s, sizeof s);
 
+        // init SSL socket
+        SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
+        SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+        SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION);
+        SSL *ssl = SSL_new(ctx);
+        SSL_set_fd(ssl, new_fd);
+        SSL_use_certificate_chain_file(ssl, "fullchain.pem");
+        SSL_use_PrivateKey_file(ssl, "server-key.pem", SSL_FILETYPE_PEM);
+
+        if (SSL_accept(ssl) <= 0)
+        {
+            ERR_print_errors_fp(stderr);
+            // perror("SSL_accept failed");
+            exit(ERR_SSL);
+        }
+
         // print what u get from the client
         int numbytes;
         char buf[MAX_DATA_SIZE];
         char **req = malloc(sizeof(char *));
-        if ((numbytes = recv(new_fd, buf, MAX_DATA_SIZE - 1, 0)) == -1)
+        if ((numbytes = SSL_read(ssl, buf, MAX_DATA_SIZE - 1)) <= 0)
         {
-            perror("recv");
-            exit(1);
+            // fprintf(stderr, "errrrr: %d\n", SSL_get_error(ssl, numbytes));
+            perror("SSLread");
+            exit(ERR);
         }
 
         // group the request object
         req[0] = strtok(buf, "\r\n");
-        char *tok;
+        char *tok = NULL;
+        buf[numbytes] = '\0';
         printf("%s\r\n", req[0]);
         int req_len = 1;
+
         while ((tok = strtok(NULL, "\r\n")) != NULL)
         {
             req = realloc(req, sizeof(char *) * (req_len + 1));
@@ -182,7 +204,7 @@ void process_requests(int sockfd, char *dir)
         // filler
         char *ext = route_str_ext(route);
 
-        char *file_type;
+        char *file_type = NULL;
         for (int i = 1; req[i] != NULL; i++)
         {
             file_type = strstr(req[i], "Sec-Fetch-Dest: ");
@@ -199,14 +221,19 @@ void process_requests(int sockfd, char *dir)
             {
                 free(req);
                 close(new_fd);
+                SSL_shutdown(ssl);
+                SSL_free(ssl);
+                SSL_CTX_free(ctx);
                 continue;
             }
+            printf("accept: %s\n", accept_format);
         }
         else
         {
             accept_format = strdup("text/plain");
         }
 
+        // in child proc(fuffiling current req)
         if (!fork())
         {
             char *res = NULL;
@@ -216,7 +243,7 @@ void process_requests(int sockfd, char *dir)
 
             close(sockfd);
 
-            if (send(new_fd, res, res_len, 0) == -1)
+            if (SSL_write(ssl, res, res_len) < 0)
             {
                 perror("send");
             }
@@ -224,11 +251,18 @@ void process_requests(int sockfd, char *dir)
             free(accept_format);
             free(res);
             free(req);
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+            SSL_CTX_free(ctx);
             exit(EXIT_SUCCESS);
         }
+        // in parent proc(listening to more requests)
         free(req);
         free(accept_format);
         close(new_fd);
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
     }
     return;
 }
@@ -269,7 +303,7 @@ int read_file(char *file_name, char **file_contents, char *file_format, char *di
     // init data
     char *type_addon = "";
     int len;
-    // open the file descriptor
+    // open the file desc   riptor
 
     char *path = malloc(strlen(dir) + strlen("/") + strlen(file_name) + 1);
     snprintf(path, strlen(dir) + strlen("/") + strlen(file_name) + 1, "%s/%s", dir, file_name);
@@ -322,7 +356,12 @@ int read_file(char *file_name, char **file_contents, char *file_format, char *di
     header = realloc(header, head_len + 1);
     *file_contents = malloc(len + head_len + 1);
     strcpy(*file_contents, header);
-    fread(*file_contents + head_len, len, 1, fp);
+
+    if (fread(*file_contents + head_len, 1, len, fp) != len)
+    {
+        perror("fread");
+        exit(ERR);
+    }
 
     // set last byte to null and close
     (*file_contents)[len + head_len] = 0;
@@ -420,7 +459,9 @@ char *stralp(char *str)
  */
 char *route_str_ext(char *route)
 {
+    // get the actual path of file
     char *path = route_str__rel_path(route);
+    // get the extension after the destination file
     return strrchr(path, '.');
 }
 
@@ -444,3 +485,5 @@ char *route_str__rel_path(char *route)
     // returns the whole string if no args
     return route;
 }
+
+// exit_err(int code, )

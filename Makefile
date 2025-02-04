@@ -1,20 +1,22 @@
 # Compiler
 CC = gcc
-CFLAGS = -Wall -Werror -g
+CFLAGS = -Wall -Werror -g -O2 
+CLINK = -lssl -lcrypto
 
 # Output files
-CLIENT = client
 SERVER = server
+SERVER2 = server2
+
 
 # Compile	
-all: $(CLIENT) $(SERVER)
-
-$(CLIENT): client.c
-	$(CC) $(CFLAGS) client.c -o $(CLIENT)
+all: $(SERVER2) $(SERVER)
 
 $(SERVER): server.c
-	$(CC) $(CFLAGS) server.c -o $(SERVER)
+	$(CC) $(CFLAGS) server.c -o $(SERVER) $(CLINK)
+
+$(SERVER2): server2.c
+	$(CC) $(CFLAGS) server2.c -o $(SERVER2) $(CLINK)
 
 # Clean up build artifacts
 clean:
-	rm -f $(CLIENT) $(SERVER)
+	rm -f $(SERVER2) $(SERVER)

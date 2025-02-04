@@ -5,11 +5,9 @@
             "label": "C/C++: gcc build active file",
             "command": "/usr/bin/gcc",
             "args": [
-                "-fdiagnostics-color=always",
-                "-g",
-                "${file}",
-                "-o",
-                "${fileDirname}/${fileBasenameNoExtension}"
+                "-Wall", "-Werror", "-g", "-O2",
+                "server.c", "-o", "server",
+                "-lssl", "-lcrypto"
             ],
             "options": {
                 "cwd": "${fileDirname}"
