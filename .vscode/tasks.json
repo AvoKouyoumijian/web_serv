@@ -7,7 +7,7 @@
             "args": [
                 "-Wall", "-Werror", "-g", "-O2",
                 "server.c", "-o", "server",
-                "-lssl", "-lcrypto"
+                "-lssl", "-lcrypto", 
             ],
             "options": {
                 "cwd": "${fileDirname}"

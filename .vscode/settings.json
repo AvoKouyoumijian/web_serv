@@ -8,6 +8,8 @@
         "inet.h": "c",
         "ssl.h": "c",
         "macros.h": "c",
-        "helper.h": "c"
+        "helper.h": "c",
+        "ftw.h": "c",
+        "types.h": "c"
     }
 }

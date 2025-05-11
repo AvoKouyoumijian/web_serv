@@ -18,6 +18,8 @@
 #include <openssl/ssl.h>
 #include "helper.h"
 
+#include <ftw.h>
+
 // server setting defn's
 #define PORT "3490"
 #define BACKLOG 5
@@ -52,7 +54,7 @@ int main(int argc, char *argv[])
     char *dir;
     if (argc < 2)
     {
-        dir = ".";
+        dir = strdup(".");
     }
     else
     {
@@ -60,7 +62,7 @@ int main(int argc, char *argv[])
         {
             argv[1][strlen(argv[1]) - 1] = '\0';
         }
-        dir = argv[1];
+        dir = strdup(argv[1]);
     }
     // gather config info for server
     int sockfd;
@@ -88,6 +90,7 @@ int search_server_connection(struct addrinfo *servinfo)
     struct addrinfo *p;
     int yes = 1, sockfd;
 
+    p = servinfo;
     for (p = servinfo; p != NULL; p = p->ai_next)
     {
         if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
@@ -169,7 +172,7 @@ void process_requests(int sockfd, char *dir)
         char **req = malloc(sizeof(char *));
         if ((numbytes = SSL_read(ssl, buf, MAX_DATA_SIZE - 1)) <= 0)
         {
-            // fprintf(stderr, "errrrr: %d\n", SSL_get_error(ssl, numbytes));
+            // fprintf(stderr, "errrrr: %d\n", SSL_get_error(ssl, numbytes));x
             perror("SSLread");
             exit(ERR);
         }
@@ -185,17 +188,24 @@ void process_requests(int sockfd, char *dir)
         {
             req = realloc(req, sizeof(char *) * (req_len + 1));
             req[req_len] = tok;
+
             printf("%s\r\n", req[req_len]);
             req_len++;
         }
-        printf("\n");
 
         // get main details of the request
         char *req_type = strtok(req[0], " ");
         char *route = strtok(NULL, " ");
         if (!strcmp(route, "/"))
         {
-            route = "/index.html";
+            // recursively find where index.html is
+            char *out = find_index(strdup(dir));
+
+            char *route_part = out + strlen(dir);
+            route = strdup(route_part);
+
+            free(route_part);
+            free(out);
         }
         char *version = strtok(NULL, " ");
         // filler
@@ -248,6 +258,7 @@ void process_requests(int sockfd, char *dir)
                 perror("send");
             }
             close(new_fd);
+            free(dir);
             free(accept_format);
             free(res);
             free(req);
@@ -297,13 +308,14 @@ void get_serv_info(struct addrinfo **servinfo)
  */
 int read_file(char *file_name, char **file_contents, char *file_format, char *dir, char *file_type)
 {
+
     // init a html response header
     char *header = malloc(1024);
 
     // init data
     char *type_addon = "";
     int len;
-    // open the file desc   riptor
+    // open the file descriptor
 
     char *path = malloc(strlen(dir) + strlen("/") + strlen(file_name) + 1);
     snprintf(path, strlen(dir) + strlen("/") + strlen(file_name) + 1, "%s/%s", dir, file_name);
@@ -403,19 +415,13 @@ char *handshake(char *route, char **req, int req_len, char *file_type, char *ext
                 accept_format = malloc(strlen("text/") + strlen(ext) + 1);
                 snprintf(accept_format, strlen("text/") + strlen(ext) + 1, "text/%s", ext + 1);
             }
-            // deal with image
-            else if (!strcmp("image", file_type))
+            // any other form(accept empty);
+            else if (strcmp("empty", file_type))
             {
-                accept_format = malloc(strlen("image/") + strlen(ext) + 1);
-                snprintf(accept_format, strlen("image/") + strlen(ext) + 1, "image/%s", ext + 1);
+                accept_format = malloc(strlen(file_type) + strlen(ext) + 1);
+                snprintf(accept_format, strlen(file_type) + strlen(ext) + 1, "%s/%s", file_type,
+                         ext + 1);
             }
-            // deal with font
-            else if (!strcmp("font", file_type))
-            {
-                accept_format = malloc(strlen("font/") + strlen(ext) + 1);
-                snprintf(accept_format, strlen("font/") + strlen(ext) + 1, "font/%s", ext + 1);
-            }
-            // any other form;
             else
             {
                 accept_format = strdup("text/plain");
@@ -485,5 +491,3 @@ char *route_str__rel_path(char *route)
     // returns the whole string if no args
     return route;
 }
-
-// exit_err(int code, )

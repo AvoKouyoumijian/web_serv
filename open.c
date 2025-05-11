@@ -1,30 +1,36 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <malloc.h>
 
-// function declerations:
-char *strredup(char *dest, char *src);
-void *get_in_addr(struct sockaddr *their_addr);
-char *find_index(char *path);
-char *strredup(char *dest, char *src);
+char *find_dir(char *path);
+char *strredup(char *src, char *dup);
 void tofree(void *mem);
 
-void *get_in_addr(struct sockaddr *their_addr)
+int main()
 {
-    if (their_addr->sa_family == AF_INET)
+
+    char *path = strdup(".");
+    char *out = find_dir(strdup(path));
+    if (!out)
     {
-        return &(((struct sockaddr_in *)their_addr)->sin_addr);
+        printf("nothing found :(");
+        return 0;
     }
+    // char *print = out + strlen("/home/avo-kouyoumijian/project/web_serv");
+    printf("right yee full: %s\n", out);
+    free(out);
+    printf("path: %s\n", path);
+    // free(e);
+    // printf("right yee path: %s\n", print);
+    free(path);
+    return 0;
+}
 
-    return &(((struct sockaddr_in6 *)their_addr)->sin6_addr);
-};
-
-char *find_index(char *path)
+char *find_dir(char *path)
 {
     DIR *folder = opendir(path);
     struct dirent *entry;
@@ -39,7 +45,7 @@ char *find_index(char *path)
             size_t len = strlen(path_cpy) + strlen("/") + strlen(entry->d_name) + 1;
             path_cpy = realloc(path_cpy, len);
             snprintf(path_cpy, len, "%s/%s", path, entry->d_name);
-            path_cpy = find_index(path_cpy);
+            path_cpy = find_dir(path_cpy);
             if (path_cpy != NULL)
             {
                 path = strredup(path, path_cpy);
@@ -76,7 +82,7 @@ char *strredup(char *dest, char *src)
     tofree(dest);
     dest = strdup(src);
     return dest;
-};
+}
 
 /**
  * params: void *mem
