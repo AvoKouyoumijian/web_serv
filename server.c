@@ -195,8 +195,9 @@ void process_requests(int sockfd, char *dir)
 
         // get main details of the request
         char *req_type = strtok(req[0], " ");
-        char *route = strtok(NULL, " ");
-        if (!strcmp(route, "/"))
+        char *route_extract = strtok(NULL, " ");
+        char *route = NULL;
+        if (!strcmp(route_extract, "/"))
         {
             // recursively find where index.html is
             char *out = find_index(strdup(dir));
@@ -204,9 +205,13 @@ void process_requests(int sockfd, char *dir)
             char *route_part = out + strlen(dir);
             route = strdup(route_part);
 
-            free(route_part);
             free(out);
         }
+        else
+        {
+            route = strdup(route_extract);
+        }
+
         char *version = strtok(NULL, " ");
         // filler
         req_type++;
@@ -230,6 +235,7 @@ void process_requests(int sockfd, char *dir)
             if ((accept_format = handshake(route + 1, req, req_len, file_type, ext)) == NULL)
             {
                 free(req);
+                free(route);
                 close(new_fd);
                 SSL_shutdown(ssl);
                 SSL_free(ssl);
@@ -259,6 +265,7 @@ void process_requests(int sockfd, char *dir)
             }
             close(new_fd);
             free(dir);
+            free(route);
             free(accept_format);
             free(res);
             free(req);
@@ -269,6 +276,7 @@ void process_requests(int sockfd, char *dir)
         }
         // in parent proc(listening to more requests)
         free(req);
+        free(route);
         free(accept_format);
         close(new_fd);
         SSL_shutdown(ssl);
